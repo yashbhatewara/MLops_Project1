@@ -45,13 +45,37 @@ class Proj1Data:
                 collection = self.mongo_client[database_name][collection_name]
 
             # Convert collection data to DataFrame and preprocess
-            print("Fetching data from mongoDB")
-            df = pd.DataFrame(list(collection.find()))
-            print(f"Data fecthed with len: {len(df)}")
-            if "id" in df.columns.to_list():
-                df = df.drop(columns=["id"], axis=1)
-            df.replace({"na":np.nan},inplace=True)
-            return df
+            print("Fetching data from MongoDB using batching")
 
+            batch_size = 1000
+            cursor = collection.find({}, batch_size=batch_size)
+
+            batch_records = []
+            dataframes = []
+
+            for document in cursor:
+                batch_records.append(document)
+
+                if len(batch_records) == batch_size:
+                        df_batch = pd.DataFrame(batch_records)
+                        dataframes.append(df_batch)
+                        batch_records.clear()
+
+            if batch_records:
+                    df_batch = pd.DataFrame(batch_records)
+                    dataframes.append(df_batch)
+            
+            if not dataframes:
+                return pd.DataFrame()
+
+            df = pd.concat(dataframes, ignore_index=True)
+            print(f"Data fetched with len: {len(df)}")
+
+            if "_id" in df.columns:
+                df.drop(columns=["_id"], inplace=True)
+
+            df.replace({"na": np.nan}, inplace=True)
+            return df
+        
         except Exception as e:
             raise MyException(e, sys)
