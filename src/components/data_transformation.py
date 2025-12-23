@@ -58,7 +58,7 @@ class DataTransformation:
                     ("StandardScaler", numeric_transformer, num_features),
                     ("MinMaxScaler", min_max_scaler, mm_columns)
                 ],
-                remainder='passthrough'  # Leaves other columns as they are
+                remainder='drop'  # Leaves other columns as they are
             )
 
             # Wrapping everything in a single pipeline
