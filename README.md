@@ -1,7 +1,3 @@
-Here is a **clean, recruiter friendly, GitHub ready README version** of your content. It is structured, professional, and highlights your MLOps depth without sounding like raw notes. You can directly paste this into `README.md`.
-
----
-
 # 🚗 Vehicle Insurance MLOps Project
 
 **End to End Production Grade Machine Learning Pipeline**
