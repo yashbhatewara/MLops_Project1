@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 import pandas as pd
-from imblearn.combine import SMOTEENN
+from src.utils.main_utils import apply_smote_balancing
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.compose import ColumnTransformer
@@ -146,15 +146,17 @@ class DataTransformation:
             input_feature_test_arr = preprocessor.transform(input_feature_test_df)
             logging.info("Transformation done end to end to train-test df.")
 
-            logging.info("Applying SMOTEENN for handling imbalanced dataset.")
-            smt = SMOTEENN(sampling_strategy="minority")
-            input_feature_train_final, target_feature_train_final = smt.fit_resample(
-                input_feature_train_arr, target_feature_train_df
+            logging.info("Applying SMOTE on training data only")
+
+            input_feature_train_final, target_feature_train_final = apply_smote_balancing(
+             X_train=input_feature_train_arr,
+             y_train=target_feature_train_df.values
             )
-            input_feature_test_final, target_feature_test_final = smt.fit_resample(
-                input_feature_test_arr, target_feature_test_df
-            )
-            logging.info("SMOTEENN applied to train-test df.")
+
+            # IMPORTANT: DO NOT TOUCH TEST DATA
+            input_feature_test_final = input_feature_test_arr
+            target_feature_test_final = target_feature_test_df.values
+
 
             train_arr = np.c_[input_feature_train_final, np.array(target_feature_train_final)]
             test_arr = np.c_[input_feature_test_final, np.array(target_feature_test_final)]
