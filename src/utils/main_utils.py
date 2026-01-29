@@ -5,6 +5,16 @@ import numpy as np
 import dill
 import yaml
 from pandas import DataFrame
+from imblearn.over_sampling import SMOTE
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    precision_recall_curve
+)
 
 from src.exception import MyException
 from src.logger import logging
@@ -84,6 +94,101 @@ def save_object(file_path: str, obj: object) -> None:
 
     except Exception as e:
         raise MyException(e, sys) from e
+    
+
+def apply_smote_balancing(X_train: np.ndarray,
+                          y_train: np.ndarray,
+                          sampling_strategy: str = 'auto',
+                          k_neighbors: int = 5):
+    """
+    Apply SMOTE only when class imbalance is significant
+    """
+    try:
+        unique, counts = np.unique(y_train, return_counts=True)
+        class_ratio = min(counts) / sum(counts)
+
+        logging.info(f"Class distribution before SMOTE: {dict(zip(unique, counts))}")
+        logging.info(f"Minority class ratio: {class_ratio:.2%}")
+
+        if class_ratio < 0.30:
+            logging.info("Applying SMOTE for class balancing")
+
+            smote = SMOTE(
+                sampling_strategy=sampling_strategy,
+                k_neighbors=k_neighbors,
+                random_state=42
+            )
+
+            X_resampled, y_resampled = smote.fit_resample(X_train, y_train)
+
+            unique, counts = np.unique(y_resampled, return_counts=True)
+            logging.info(f"Class distribution after SMOTE: {dict(zip(unique, counts))}")
+
+            return X_resampled, y_resampled
+
+        logging.info("SMOTE not required")
+        return X_train, y_train
+
+    except Exception as e:
+        raise MyException(e, sys) from e
+
+
+def get_classification_metrics(y_true: np.ndarray,
+                               y_pred: np.ndarray,
+                               y_pred_proba: np.ndarray = None) -> dict:
+    """
+    Calculate classification metrics used across pipeline
+    """
+    try:
+        metrics = {
+            "precision": precision_score(y_true, y_pred),
+            "recall": recall_score(y_true, y_pred),
+            "f1_score": f1_score(y_true, y_pred)
+        }
+
+        cm = confusion_matrix(y_true, y_pred)
+        metrics["confusion_matrix"] = cm.tolist()
+        metrics["tn"], metrics["fp"], metrics["fn"], metrics["tp"] = cm.ravel()
+
+        if y_pred_proba is not None:
+            metrics["roc_auc"] = roc_auc_score(y_true, y_pred_proba)
+
+        logging.info(
+            f"Metrics | Precision: {metrics['precision']:.4f}, "
+            f"Recall: {metrics['recall']:.4f}, "
+            f"F1: {metrics['f1_score']:.4f}"
+        )
+
+        return metrics
+
+    except Exception as e:
+        raise MyException(e, sys) from e
+
+
+def find_optimal_threshold(y_true: np.ndarray,
+                           y_pred_proba: np.ndarray,
+                           metric: str = "f1") -> float:
+    """
+    Find optimal decision threshold based on precision-recall curve
+    """
+    try:
+        precisions, recalls, thresholds = precision_recall_curve(y_true, y_pred_proba)
+
+        f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
+        best_idx = np.argmax(f1_scores)
+
+        optimal_threshold = thresholds[best_idx] if best_idx < len(thresholds) else 0.5
+
+        logging.info(
+            f"Optimal threshold found: {optimal_threshold:.4f} "
+            f"(F1={f1_scores[best_idx]:.4f})"
+        )
+
+        return optimal_threshold
+
+    except Exception as e:
+        raise MyException(e, sys) from e
+
 
 
 # def drop_columns(df: DataFrame, cols: list)-> DataFrame:
