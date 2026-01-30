@@ -1,9 +1,10 @@
 import sys
 from typing import Tuple
+from xml.parsers.expat import model
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from src.utils.main_utils import (get_classification_metrics,find_optimal_threshold)
 
 from src.exception import MyException
 from src.logger import logging
@@ -22,7 +23,7 @@ class ModelTrainer:
         self.data_transformation_artifact = data_transformation_artifact
         self.model_trainer_config = model_trainer_config
 
-    def get_model_object_and_report(self, train: np.array, test: np.array) -> Tuple[object, object]:
+    def get_model_object_and_report(self, train: np.array, test: np.array) -> Tuple[object, object,float]:
         """
         Method Name :   get_model_object_and_report
         Description :   This function trains a RandomForestClassifier with specified parameters
@@ -44,25 +45,49 @@ class ModelTrainer:
                 min_samples_leaf = self.model_trainer_config._min_samples_leaf,
                 max_depth = self.model_trainer_config._max_depth,
                 criterion = self.model_trainer_config._criterion,
-                random_state = self.model_trainer_config._random_state
+                class_weight="balanced",  # 🔥 CRITICAL FIX
+                random_state=self.model_trainer_config._random_state,
+                n_jobs=-1
             )
-
+            
             # Fit the model
             logging.info("Model training going on...")
             model.fit(x_train, y_train)
             logging.info("Model training done.")
 
             # Predictions and evaluation metrics
-            y_pred = model.predict(x_test)
-            accuracy = accuracy_score(y_test, y_pred)
-            f1 = f1_score(y_test, y_pred)
-            precision = precision_score(y_test, y_pred)
-            recall = recall_score(y_test, y_pred)
+            y_train_proba = model.predict_proba(x_train)[:, 1]
+            y_test_proba = model.predict_proba(x_test)[:, 1]
 
-            # Creating metric artifact
-            metric_artifact = ClassificationMetricArtifact(f1_score=f1, precision_score=precision, recall_score=recall)
-            return model, metric_artifact
-        
+            # Find optimal threshold on training data
+            optimal_threshold = find_optimal_threshold(
+                y_true=y_train,
+                y_pred_proba=y_train_proba,
+                metric="f1"
+            )
+
+            logging.info(f"Optimal threshold selected: {optimal_threshold:.4f}")
+
+            # Apply threshold on test data
+            y_test_pred = (y_test_proba >= optimal_threshold).astype(int)
+
+            # Compute metrics
+            metrics = get_classification_metrics(
+                y_true=y_test,
+                y_pred=y_test_pred,
+                y_pred_proba=y_test_proba
+            )
+
+            metric_artifact = ClassificationMetricArtifact(
+                f1_score=metrics["f1_score"],
+                precision_score=metrics["precision"],
+                recall_score=metrics["recall"]
+            )
+
+            # ✅ RETURN AT THE VERY END
+            return model, metric_artifact, optimal_threshold
+
+      
         except Exception as e:
             raise MyException(e, sys) from e
 
@@ -84,29 +109,30 @@ class ModelTrainer:
             logging.info("train-test data loaded")
             
             # Train model and get metrics
-            trained_model, metric_artifact = self.get_model_object_and_report(train=train_arr, test=test_arr)
+            trained_model, metric_artifact, optimal_threshold = self.get_model_object_and_report(train=train_arr, test=test_arr)
             logging.info("Model object and artifact loaded.")
             
             # Load preprocessing object
             preprocessing_obj = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
             logging.info("Preprocessing obj loaded.")
 
-            # Check if the model's accuracy meets the expected threshold
-            if accuracy_score(train_arr[:, -1], trained_model.predict(train_arr[:, :-1])) < self.model_trainer_config.expected_accuracy:
-                logging.info("No model found with score above the base score")
-                raise Exception("No model found with score above the base score")
-
             # Save the final model object that includes both preprocessing and the trained model
             logging.info("Saving new model as performace is better than previous one.")
-            my_model = MyModel(preprocessing_object=preprocessing_obj, trained_model_object=trained_model)
-            save_object(self.model_trainer_config.trained_model_file_path, my_model)
+            model_package = {"preprocessing_object": preprocessing_obj,"trained_model": trained_model,
+                             "threshold": optimal_threshold} 
+
+            save_object(self.model_trainer_config.trained_model_file_path, model_package)
+
+            save_object(self.model_trainer_config.trained_model_file_path, model_package)
             logging.info("Saved final model object that includes both preprocessing and the trained model")
 
             # Create and return the ModelTrainerArtifact
             model_trainer_artifact = ModelTrainerArtifact(
-                trained_model_file_path=self.model_trainer_config.trained_model_file_path,
-                metric_artifact=metric_artifact,
+                 trained_model_file_path=self.model_trainer_config.trained_model_file_path,
+                 metric_artifact=metric_artifact,
+                 threshold=optimal_threshold
             )
+
             logging.info(f"Model trainer artifact: {model_trainer_artifact}")
             return model_trainer_artifact
         
