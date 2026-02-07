@@ -96,22 +96,39 @@ class ModelEvaluation:
 
             logging.info("Test data loaded and now transforming it for prediction...")
 
-            x = self._map_gender_column(x)
-            x = self._drop_id_column(x)
-            x = self._create_dummy_columns(x)
-            x = self._rename_columns(x)
+            # x = self._map_gender_column(x)
+            # x = self._drop_id_column(x)
+            # x = self._create_dummy_columns(x)
+            # x = self._rename_columns(x)
 
-            trained_model = load_object(file_path=self.model_trainer_artifact.trained_model_file_path)
-            logging.info("Trained model loaded/exists.")
-            trained_model_f1_score = self.model_trainer_artifact.metric_artifact.f1_score
-            logging.info(f"F1_Score for this model: {trained_model_f1_score}")
+            # Load trained model package
+            model_package = load_object(
+                file_path=self.model_trainer_artifact.trained_model_file_path
+            )
+
+            trained_model = model_package["trained_model"]
+            preprocessing_obj = model_package["preprocessing_object"]
+            threshold = model_package["threshold"]
+
+            logging.info("Trained model, preprocessing object, and threshold loaded.")
+
+            # Apply preprocessing
+            x_transformed = preprocessing_obj.transform(x)
+
+            y_proba_trained = trained_model.predict_proba(x_transformed)[:, 1]
+            y_pred_trained = (y_proba_trained >= threshold).astype(int)
+
+            trained_model_f1_score = f1_score(y, y_pred_trained)
+            logging.info(f"F1_Score-New Trained Model (threshold-based): {trained_model_f1_score}")
 
             best_model_f1_score=None
             best_model = self.get_best_model()
             if best_model is not None:
                 logging.info(f"Computing F1_Score for production model..")
-                y_hat_best_model = best_model.predict(x)
-                best_model_f1_score = f1_score(y, y_hat_best_model)
+                y_proba_best_model = best_model.predict_proba(x_transformed)[:, 1]
+                y_pred_best_model = (y_proba_best_model >= threshold).astype(int)
+                best_model_f1_score = f1_score(y, y_pred_best_model)
+
                 logging.info(f"F1_Score-Production Model: {best_model_f1_score}, F1_Score-New Trained Model: {trained_model_f1_score}")
             
             tmp_best_model_score = 0 if best_model_f1_score is None else best_model_f1_score
