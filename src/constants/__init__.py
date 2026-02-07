@@ -63,6 +63,25 @@ MIN_SAMPLES_SPLIT_MAX_DEPTH: int = 10
 MIN_SAMPLES_SPLIT_CRITERION: str = 'entropy'
 MIN_SAMPLES_SPLIT_RANDOM_STATE: int = 101
 
+# ================= LIGHTGBM CONFIG =================
+LGBM_N_ESTIMATORS = 400
+LGBM_LEARNING_RATE = 0.05
+LGBM_MAX_DEPTH = -1
+LGBM_NUM_LEAVES = 64
+LGBM_SUBSAMPLE = 0.8
+LGBM_COLSAMPLE_BYTREE = 0.8
+LGBM_RANDOM_STATE = 42
+LGBM_CLASS_WEIGHT = "balanced"
+
+
+""""
+MODEL Selection
+"""
+MODEL_TYPE = "LightGBM"
+#options: random_forest, Lightgbm
+THRESHOLD_OPTIMIZATION_METRIC = "f0.75"  
+
+
 """
 MODEL Evaluation related constants
 """

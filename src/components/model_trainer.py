@@ -4,7 +4,10 @@ from xml.parsers.expat import model
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
+import lightgbm as lgb
 from src.utils.main_utils import (get_classification_metrics,find_optimal_threshold)
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import train_test_split
 
 from src.exception import MyException
 from src.logger import logging
@@ -12,6 +15,7 @@ from src.utils.main_utils import load_numpy_array_data, load_object, save_object
 from src.entity.config_entity import ModelTrainerConfig
 from src.entity.artifact_entity import DataTransformationArtifact, ModelTrainerArtifact, ClassificationMetricArtifact
 from src.entity.estimator import MyModel
+from src.constants import *
 
 class ModelTrainer:
     def __init__(self, data_transformation_artifact: DataTransformationArtifact,
@@ -26,7 +30,7 @@ class ModelTrainer:
     def get_model_object_and_report(self, train: np.array, test: np.array) -> Tuple[object, object,float]:
         """
         Method Name :   get_model_object_and_report
-        Description :   This function trains a RandomForestClassifier with specified parameters
+        Description :   This function trains RandomForestClassifier or LightGBM with specified parameters
         
         Output      :   Returns metric artifact object and trained model object
         On Failure  :   Write an exception log and then raise an exception
@@ -35,35 +39,71 @@ class ModelTrainer:
             logging.info("Training RandomForestClassifier with specified parameters")
 
             # Splitting the train and test data into features and target variables
-            x_train, y_train, x_test, y_test = train[:, :-1], train[:, -1], test[:, :-1], test[:, -1]
+            
+            x_full, y_full = train[:, :-1], train[:, -1]
+
+            x_train, x_calib, y_train, y_calib =train_test_split(x_full,y_full,
+                test_size=0.2,random_state=42,stratify=y_full)
+
+            x_test, y_test = test[:, :-1], test[:, -1]
             logging.info("train-test split done.")
 
             # Initialize RandomForestClassifier with specified parameters
-            model = RandomForestClassifier(
-                n_estimators = self.model_trainer_config._n_estimators,
-                min_samples_split = self.model_trainer_config._min_samples_split,
-                min_samples_leaf = self.model_trainer_config._min_samples_leaf,
-                max_depth = self.model_trainer_config._max_depth,
-                criterion = self.model_trainer_config._criterion,
-                class_weight="balanced",  # 🔥 CRITICAL FIX
-                random_state=self.model_trainer_config._random_state,
-                n_jobs=-1
-            )
+            if MODEL_TYPE == "random_forest":
+                logging.info("Training RandomForest model")
+                model = RandomForestClassifier(
+                    n_estimators=MODEL_TRAINER_N_ESTIMATORS,
+                    min_samples_split=MODEL_TRAINER_MIN_SAMPLES_SPLIT,
+                    min_samples_leaf=MODEL_TRAINER_MIN_SAMPLES_LEAF,
+                    max_depth=MIN_SAMPLES_SPLIT_MAX_DEPTH,
+                    criterion=MIN_SAMPLES_SPLIT_CRITERION,
+                    class_weight="balanced",
+                    random_state=MIN_SAMPLES_SPLIT_RANDOM_STATE,
+                    n_jobs=-1
+                )
+
+            elif MODEL_TYPE == "LightGBM":
+                logging.info("Training LightGBM model")
+                model = lgb.LGBMClassifier(
+                    n_estimators=LGBM_N_ESTIMATORS,
+                    learning_rate=LGBM_LEARNING_RATE,
+                    max_depth=LGBM_MAX_DEPTH,
+                    num_leaves=LGBM_NUM_LEAVES,
+                    subsample=LGBM_SUBSAMPLE,
+                    colsample_bytree=LGBM_COLSAMPLE_BYTREE,
+                    class_weight=LGBM_CLASS_WEIGHT,
+                    random_state=LGBM_RANDOM_STATE,
+                    n_jobs=-1
+                )
+            else:
+                raise MyException(
+                    f"Unsupported MODEL_TYPE: {MODEL_TYPE}. Expected 'random_forest' or 'lightgbm'",
+                sys
+                )
             
             # Fit the model
             logging.info("Model training going on...")
             model.fit(x_train, y_train)
             logging.info("Model training done.")
 
+            logging.info("Applying probability calibration (sigmoid)")
+            calibrated_model = CalibratedClassifierCV(
+                estimator=model,
+                method="sigmoid",
+                cv="prefit"
+            )
+            calibrated_model.fit(x_calib, y_calib)
+
             # Predictions and evaluation metrics
-            y_train_proba = model.predict_proba(x_train)[:, 1]
-            y_test_proba = model.predict_proba(x_test)[:, 1]
+            # Using calibration set for threshold selection
+            y_calib_proba = calibrated_model.predict_proba(x_calib)[:, 1]
+            y_test_proba = calibrated_model.predict_proba(x_test)[:, 1]
 
             # Find optimal threshold on training data
             optimal_threshold = find_optimal_threshold(
-                y_true=y_train,
-                y_pred_proba=y_train_proba,
-                metric="f1"
+                y_true=y_calib,
+                y_pred_proba=y_calib_proba,
+                metric=THRESHOLD_OPTIMIZATION_METRIC
             )
 
             logging.info(f"Optimal threshold selected: {optimal_threshold:.4f}")
@@ -109,7 +149,7 @@ class ModelTrainer:
             logging.info("train-test data loaded")
             
             # Train model and get metrics
-            trained_model, metric_artifact, optimal_threshold = self.get_model_object_and_report(train=train_arr, test=test_arr)
+            calibrated_model, metric_artifact, optimal_threshold = self.get_model_object_and_report(train=train_arr, test=test_arr)
             logging.info("Model object and artifact loaded.")
             
             # Load preprocessing object
@@ -118,10 +158,8 @@ class ModelTrainer:
 
             # Save the final model object that includes both preprocessing and the trained model
             logging.info("Saving new model as performace is better than previous one.")
-            model_package = {"preprocessing_object": preprocessing_obj,"trained_model": trained_model,
+            model_package = {"preprocessing_object": preprocessing_obj,"trained_model": calibrated_model,
                              "threshold": optimal_threshold} 
-
-            save_object(self.model_trainer_config.trained_model_file_path, model_package)
 
             save_object(self.model_trainer_config.trained_model_file_path, model_package)
             logging.info("Saved final model object that includes both preprocessing and the trained model")

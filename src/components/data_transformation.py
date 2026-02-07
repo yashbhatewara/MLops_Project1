@@ -12,6 +12,7 @@ from src.entity.artifact_entity import DataTransformationArtifact, DataIngestion
 from src.exception import MyException
 from src.logger import logging
 from src.utils.main_utils import save_object, save_numpy_array_data, read_yaml_file
+from src.constants import MODEL_TYPE
 
 
 class DataTransformation:
@@ -146,14 +147,18 @@ class DataTransformation:
             input_feature_test_arr = preprocessor.transform(input_feature_test_df)
             logging.info("Transformation done end to end to train-test df.")
 
-            logging.info("Applying SMOTE on training data only")
+            if MODEL_TYPE == "LightGBM":
+                logging.info("Skipping SMOTE for LightGBM training")
+                input_feature_train_final = input_feature_train_arr
+                target_feature_train_final = target_feature_train_df.values
+            else:
+                logging.info("Applying SMOTE on training data (non-LightGBM model)")
+                input_feature_train_final, target_feature_train_final = apply_smote_balancing(
+                    X_train=input_feature_train_arr,
+                    y_train=target_feature_train_df.values
+    )
 
-            input_feature_train_final, target_feature_train_final = apply_smote_balancing(
-             X_train=input_feature_train_arr,
-             y_train=target_feature_train_df.values
-            )
 
-            # IMPORTANT: DO NOT TOUCH TEST DATA
             input_feature_test_final = input_feature_test_arr
             target_feature_test_final = target_feature_test_df.values
 

@@ -98,8 +98,9 @@ def save_object(file_path: str, obj: object) -> None:
 
 def apply_smote_balancing(X_train: np.ndarray,
                           y_train: np.ndarray,
-                          sampling_strategy: str = 'auto',
-                          k_neighbors: int = 5):
+                          sampling_strategy: float = 0.30,
+                          k_neighbors: int = 5,
+                          random_state: int = 42 ):
     """
     Apply SMOTE only when class imbalance is significant
     """
