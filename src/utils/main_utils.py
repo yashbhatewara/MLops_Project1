@@ -170,19 +170,45 @@ def find_optimal_threshold(y_true: np.ndarray,
                            y_pred_proba: np.ndarray,
                            metric: str = "f1") -> float:
     """
-    Find optimal decision threshold based on precision-recall curve
+    Find optimal decision threshold based on precision-recall curve.
+    
+    Supported metrics: 'f1', 'f0.5', 'f0.75', 'f2', 'precision', 'recall'
     """
     try:
         precisions, recalls, thresholds = precision_recall_curve(y_true, y_pred_proba)
 
-        f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
-        best_idx = np.argmax(f1_scores)
+        # Calculate scores based on the specified metric
+        metric_lower = metric.lower()
+        
+        if metric_lower == "f1":
+            scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
+        elif metric_lower == "f0.5":
+            # F0.5 weighs precision higher than recall
+            beta = 0.5
+            scores = (1 + beta**2) * (precisions * recalls) / ((beta**2 * precisions) + recalls + 1e-10)
+        elif metric_lower == "f0.75":
+            # F0.75 weighs precision slightly higher than recall
+            beta = 0.75
+            scores = (1 + beta**2) * (precisions * recalls) / ((beta**2 * precisions) + recalls + 1e-10)
+        elif metric_lower == "f2":
+            # F2 weighs recall higher than precision
+            beta = 2
+            scores = (1 + beta**2) * (precisions * recalls) / ((beta**2 * precisions) + recalls + 1e-10)
+        elif metric_lower == "precision":
+            scores = precisions
+        elif metric_lower == "recall":
+            scores = recalls
+        else:
+            logging.warning(f"Unknown metric '{metric}', defaulting to F1")
+            scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-10)
+        
+        best_idx = np.argmax(scores)
 
         optimal_threshold = thresholds[best_idx] if best_idx < len(thresholds) else 0.5
 
         logging.info(
             f"Optimal threshold found: {optimal_threshold:.4f} "
-            f"(F1={f1_scores[best_idx]:.4f})"
+            f"(metric={metric}, score={scores[best_idx]:.4f})"
         )
 
         return optimal_threshold

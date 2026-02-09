@@ -1,6 +1,5 @@
 import sys
 from typing import Tuple
-from xml.parsers.expat import model
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -77,7 +76,7 @@ class ModelTrainer:
                 )
             else:
                 raise MyException(
-                    f"Unsupported MODEL_TYPE: {MODEL_TYPE}. Expected 'random_forest' or 'lightgbm'",
+                    f"Unsupported MODEL_TYPE: {MODEL_TYPE}. Expected 'random_forest' or 'LightGBM'",
                 sys
                 )
             
@@ -124,8 +123,8 @@ class ModelTrainer:
                 recall_score=metrics["recall"]
             )
 
-            # ✅ RETURN AT THE VERY END
-            return model, metric_artifact, optimal_threshold
+            # ✅ RETURN AT THE VERY END (return calibrated model, not base model)
+            return calibrated_model, metric_artifact, optimal_threshold
 
       
         except Exception as e:

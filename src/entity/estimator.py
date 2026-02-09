@@ -9,8 +9,8 @@ from src.logger import logging
 
 class TargetValueMapping:
     def __init__(self):
-        self.yes:int = 0
-        self.no:int = 1
+        self.yes:int = 1  # Positive class = 1 (standard convention)
+        self.no:int = 0   # Negative class = 0 (standard convention)
     def _asdict(self):
         return self.__dict__
     def reverse_mapping(self):
@@ -47,6 +47,26 @@ class MyModel:
             logging.error("Error occurred in predict method", exc_info=True)
             raise MyException(e, sys) from e
 
+    def predict_proba(self, dataframe: pd.DataFrame) -> DataFrame:
+        """
+        Function accepts preprocessed inputs (with all custom transformations already applied),
+        applies scaling using preprocessing_object, and returns probability predictions.
+        """
+        try:
+            logging.info("Starting predict_proba process.")
+
+            # Step 1: Apply scaling transformations using the pre-trained preprocessing object
+            transformed_feature = self.preprocessing_object.transform(dataframe)
+
+            # Step 2: Get probability predictions using the trained model
+            logging.info("Using the trained model to get probability predictions")
+            probabilities = self.trained_model_object.predict_proba(transformed_feature)
+
+            return probabilities
+
+        except Exception as e:
+            logging.error("Error occurred in predict_proba method", exc_info=True)
+            raise MyException(e, sys) from e
 
     def __repr__(self):
         return f"{type(self.trained_model_object).__name__}()"

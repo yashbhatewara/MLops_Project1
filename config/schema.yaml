@@ -31,10 +31,21 @@ categorical_columns:
 drop_columns: id
 
 # for data transformation
-num_features:
+num_features:   # Columns to apply StandardScaler
   - Age
   - Vintage
 
 
-mm_columns:
+mm_columns:     # Columns to apply MinMaxScaler
   - Annual_Premium
+
+# Columns that pass through without scaling (already binary/encoded)
+passthrough_columns:
+  - Gender
+  - Driving_License
+  - Region_Code
+  - Previously_Insured
+  - Policy_Sales_Channel
+  - Vehicle_Age_lt_1_Year
+  - Vehicle_Age_gt_2_Years
+  - Vehicle_Damage_Yes

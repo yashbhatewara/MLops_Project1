@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 
 from src.constants import TARGET_COLUMN, SCHEMA_FILE_PATH, CURRENT_YEAR
+from src.utils.data_utils import map_gender_column, create_dummy_columns, rename_columns, drop_id_column
 from src.entity.config_entity import DataTransformationConfig
 from src.entity.artifact_entity import DataTransformationArtifact, DataIngestionArtifact, DataValidationArtifact
 from src.exception import MyException
@@ -59,7 +60,7 @@ class DataTransformation:
                     ("StandardScaler", numeric_transformer, num_features),
                     ("MinMaxScaler", min_max_scaler, mm_columns)
                 ],
-                remainder='drop'  # Leaves other columns as they are
+                remainder='passthrough'  # Keep columns not specified in transformers
             )
 
             # Wrapping everything in a single pipeline
@@ -74,35 +75,20 @@ class DataTransformation:
 
     def _map_gender_column(self, df):
         """Map Gender column to 0 for Female and 1 for Male."""
-        logging.info("Mapping 'Gender' column to binary values")
-        df['Gender'] = df['Gender'].map({'Female': 0, 'Male': 1}).astype(int)
-        return df
+        return map_gender_column(df)
 
     def _create_dummy_columns(self, df):
         """Create dummy variables for categorical features."""
-        logging.info("Creating dummy variables for categorical features")
-        df = pd.get_dummies(df, drop_first=True)
-        return df
+        return create_dummy_columns(df)
 
     def _rename_columns(self, df):
         """Rename specific columns and ensure integer types for dummy columns."""
-        logging.info("Renaming specific columns and casting to int")
-        df = df.rename(columns={
-            "Vehicle_Age_< 1 Year": "Vehicle_Age_lt_1_Year",
-            "Vehicle_Age_> 2 Years": "Vehicle_Age_gt_2_Years"
-        })
-        for col in ["Vehicle_Age_lt_1_Year", "Vehicle_Age_gt_2_Years", "Vehicle_Damage_Yes"]:
-            if col in df.columns:
-                df[col] = df[col].astype('int')
-        return df
+        return rename_columns(df)
 
     def _drop_id_column(self, df):
         """Drop the 'id' column if it exists."""
-        logging.info("Dropping 'id' column")
         drop_col = self._schema_config['drop_columns']
-        if drop_col in df.columns:
-            df = df.drop(drop_col, axis=1)
-        return df
+        return drop_id_column(df, column_name=drop_col)
 
     def initiate_data_transformation(self) -> DataTransformationArtifact:
         """

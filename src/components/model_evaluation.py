@@ -10,11 +10,12 @@ import pandas as pd
 from typing import Optional
 from src.entity.s3_estimator import Proj1Estimator
 from dataclasses import dataclass
+from src.utils.data_utils import map_gender_column, create_dummy_columns, rename_columns, drop_id_column
 
 @dataclass
 class EvaluateModelResponse:
     trained_model_f1_score: float
-    best_model_f1_score: float
+    best_model_f1_score: Optional[float]
     is_model_accepted: bool
     difference: float
 
@@ -40,7 +41,7 @@ class ModelEvaluation:
         """
         try:
             bucket_name = self.model_eval_config.bucket_name
-            model_path=self.model_eval_config.s3_model_key_path
+            model_path = self.model_eval_config.s3_model_key_path
             proj1_estimator = Proj1Estimator(bucket_name=bucket_name,
                                                model_path=model_path)
 
@@ -48,39 +49,8 @@ class ModelEvaluation:
                 return proj1_estimator
             return None
         except Exception as e:
-            raise  MyException(e,sys)
+            raise MyException(e, sys)
         
-    def _map_gender_column(self, df):
-        """Map Gender column to 0 for Female and 1 for Male."""
-        logging.info("Mapping 'Gender' column to binary values")
-        df['Gender'] = df['Gender'].map({'Female': 0, 'Male': 1}).astype(int)
-        return df
-
-    def _create_dummy_columns(self, df):
-        """Create dummy variables for categorical features."""
-        logging.info("Creating dummy variables for categorical features")
-        df = pd.get_dummies(df, drop_first=True)
-        return df
-
-    def _rename_columns(self, df):
-        """Rename specific columns and ensure integer types for dummy columns."""
-        logging.info("Renaming specific columns and casting to int")
-        df = df.rename(columns={
-            "Vehicle_Age_< 1 Year": "Vehicle_Age_lt_1_Year",
-            "Vehicle_Age_> 2 Years": "Vehicle_Age_gt_2_Years"
-        })
-        for col in ["Vehicle_Age_lt_1_Year", "Vehicle_Age_gt_2_Years", "Vehicle_Damage_Yes"]:
-            if col in df.columns:
-                df[col] = df[col].astype('int')
-        return df
-    
-    def _drop_id_column(self, df):
-        """Drop the 'id' column if it exists."""
-        logging.info("Dropping 'id' column")
-        if "_id" in df.columns:
-            df = df.drop("_id", axis=1)
-        return df
-
     def evaluate_model(self) -> EvaluateModelResponse:
         """
         Method Name :   evaluate_model
@@ -96,10 +66,11 @@ class ModelEvaluation:
 
             logging.info("Test data loaded and now transforming it for prediction...")
 
-            # x = self._map_gender_column(x)
-            # x = self._drop_id_column(x)
-            # x = self._create_dummy_columns(x)
-            # x = self._rename_columns(x)
+            # Apply custom transformations to match training data format
+            x = map_gender_column(x)
+            x = drop_id_column(x)
+            x = create_dummy_columns(x)
+            x = rename_columns(x)
 
             # Load trained model package
             model_package = load_object(
@@ -121,11 +92,14 @@ class ModelEvaluation:
             trained_model_f1_score = f1_score(y, y_pred_trained)
             logging.info(f"F1_Score-New Trained Model (threshold-based): {trained_model_f1_score}")
 
-            best_model_f1_score=None
+            best_model_f1_score = None
             best_model = self.get_best_model()
             if best_model is not None:
-                logging.info(f"Computing F1_Score for production model..")
-                y_proba_best_model = best_model.predict_proba(x_transformed)[:, 1]
+                logging.info("Computing F1_Score for production model..")
+                # NOTE: Using newly trained model's preprocessing and threshold for production model
+                # comparison. For a more accurate comparison, consider storing and loading
+                # the production model's own preprocessing object and threshold.
+                y_proba_best_model = best_model.predict_proba(x)[:, 1]
                 y_pred_best_model = (y_proba_best_model >= threshold).astype(int)
                 best_model_f1_score = f1_score(y, y_pred_best_model)
 
